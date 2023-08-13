@@ -11,7 +11,7 @@ func start() {
 
 	app.Get("/", handlers.Home)
 
-	app.Post("/pdf", handlers.saveFile)
+	app.Post("/pdf", handlers.SaveFile)
 
 	app.Post("/author", handlers.CreateAuthor)
 

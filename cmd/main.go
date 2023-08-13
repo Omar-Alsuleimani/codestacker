@@ -59,8 +59,5 @@ func main() {
 		fmt.Println(err)
 	}
 
-	if err := run(); err != nil {
-		fmt.Println(err)
-	}
 	start()
 }
