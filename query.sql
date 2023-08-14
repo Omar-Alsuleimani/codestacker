@@ -25,9 +25,11 @@ WHERE id = $1;
 
 -- name: CreateSentence :one
 INSERT INTO sentences (
-  sentence
+  sentence,
+  pdfId
 ) VALUES (
-  $1
+  $1,
+  $2
   )
   RETURNING *;
 

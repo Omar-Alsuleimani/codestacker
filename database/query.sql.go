@@ -27,17 +27,24 @@ func (q *Queries) CreateRecord(ctx context.Context, name string) (Record, error)
 
 const createSentence = `-- name: CreateSentence :one
 INSERT INTO sentences (
-  sentence
+  sentence,
+  pdfId
 ) VALUES (
-  $1
+  $1,
+  $2
   )
-  RETURNING id, sentence
+  RETURNING id, sentence, pdfid
 `
 
-func (q *Queries) CreateSentence(ctx context.Context, sentence string) (Sentence, error) {
-	row := q.db.QueryRow(ctx, createSentence, sentence)
+type CreateSentenceParams struct {
+	Sentence string
+	Pdfid    int32
+}
+
+func (q *Queries) CreateSentence(ctx context.Context, arg CreateSentenceParams) (Sentence, error) {
+	row := q.db.QueryRow(ctx, createSentence, arg.Sentence, arg.Pdfid)
 	var i Sentence
-	err := row.Scan(&i.ID, &i.Sentence)
+	err := row.Scan(&i.ID, &i.Sentence, &i.Pdfid)
 	return i, err
 }
 
@@ -89,7 +96,7 @@ func (q *Queries) ListRecords(ctx context.Context) ([]Record, error) {
 }
 
 const listSentences = `-- name: ListSentences :many
-SELECT id, sentence FROM sentences
+SELECT id, sentence, pdfid FROM sentences
 `
 
 func (q *Queries) ListSentences(ctx context.Context) ([]Sentence, error) {
@@ -101,7 +108,7 @@ func (q *Queries) ListSentences(ctx context.Context) ([]Sentence, error) {
 	var items []Sentence
 	for rows.Next() {
 		var i Sentence
-		if err := rows.Scan(&i.ID, &i.Sentence); err != nil {
+		if err := rows.Scan(&i.ID, &i.Sentence, &i.Pdfid); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

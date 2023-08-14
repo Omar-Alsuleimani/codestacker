@@ -17,4 +17,5 @@ type Record struct {
 type Sentence struct {
 	ID       int32
 	Sentence string
+	Pdfid    int32
 }

@@ -6,5 +6,7 @@ CREATE TABLE records (
 
 create table sentences(
   id SERIAL PRIMARY KEY,
-  sentence TEXT not null
+  sentence TEXT not null,
+  pdfId INT not null,
+  FOREIGN KEY (pdfId) references records(id) ON DELETE CASCADE
   );
