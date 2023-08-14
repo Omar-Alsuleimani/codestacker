@@ -11,17 +11,33 @@ import (
 
 const createRecord = `-- name: CreateRecord :one
 INSERT INTO records (
-  name
+  name,
+  numOfPages,
+  size
 ) VALUES (
-  $1
+  $1,
+  $2,
+  $3
 )
-RETURNING id, name, upload_time
+RETURNING id, name, upload_time, numofpages, size
 `
 
-func (q *Queries) CreateRecord(ctx context.Context, name string) (Record, error) {
-	row := q.db.QueryRow(ctx, createRecord, name)
+type CreateRecordParams struct {
+	Name       string `json:"name"`
+	Numofpages int32  `json:"numofpages"`
+	Size       int32  `json:"size"`
+}
+
+func (q *Queries) CreateRecord(ctx context.Context, arg CreateRecordParams) (Record, error) {
+	row := q.db.QueryRow(ctx, createRecord, arg.Name, arg.Numofpages, arg.Size)
 	var i Record
-	err := row.Scan(&i.ID, &i.Name, &i.UploadTime)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.UploadTime,
+		&i.Numofpages,
+		&i.Size,
+	)
 	return i, err
 }
 
@@ -37,8 +53,8 @@ INSERT INTO sentences (
 `
 
 type CreateSentenceParams struct {
-	Sentence string
-	Pdfid    int32
+	Sentence string `json:"sentence"`
+	Pdfid    int32  `json:"pdfid"`
 }
 
 func (q *Queries) CreateSentence(ctx context.Context, arg CreateSentenceParams) (Sentence, error) {
@@ -59,19 +75,25 @@ func (q *Queries) DeleteRecord(ctx context.Context, id int32) error {
 }
 
 const getRecord = `-- name: GetRecord :one
-SELECT id, name, upload_time FROM records
+SELECT id, name, upload_time, numofpages, size FROM records
 WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetRecord(ctx context.Context, id int32) (Record, error) {
 	row := q.db.QueryRow(ctx, getRecord, id)
 	var i Record
-	err := row.Scan(&i.ID, &i.Name, &i.UploadTime)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.UploadTime,
+		&i.Numofpages,
+		&i.Size,
+	)
 	return i, err
 }
 
 const listRecords = `-- name: ListRecords :many
-SELECT id, name, upload_time FROM records
+SELECT id, name, upload_time, numofpages, size FROM records
 ORDER BY name
 `
 
@@ -84,7 +106,13 @@ func (q *Queries) ListRecords(ctx context.Context) ([]Record, error) {
 	var items []Record
 	for rows.Next() {
 		var i Record
-		if err := rows.Scan(&i.ID, &i.Name, &i.UploadTime); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.UploadTime,
+			&i.Numofpages,
+			&i.Size,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -126,8 +154,8 @@ WHERE id = $1
 `
 
 type UpdateRecordParams struct {
-	ID   int32
-	Name string
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
 }
 
 func (q *Queries) UpdateRecord(ctx context.Context, arg UpdateRecordParams) error {

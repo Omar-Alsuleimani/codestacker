@@ -9,13 +9,15 @@ import (
 )
 
 type Record struct {
-	ID         int32
-	Name       string
-	UploadTime time.Time
+	ID         int32     `json:"id"`
+	Name       string    `json:"name"`
+	UploadTime time.Time `json:"upload_time"`
+	Numofpages int32     `json:"numofpages"`
+	Size       int32     `json:"size"`
 }
 
 type Sentence struct {
-	ID       int32
-	Sentence string
-	Pdfid    int32
+	ID       int32  `json:"id"`
+	Sentence string `json:"sentence"`
+	Pdfid    int32  `json:"pdfid"`
 }

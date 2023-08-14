@@ -11,7 +11,9 @@ func start() {
 
 	app.Get("/", handlers.Home)
 
-	app.Post("/pdf", handlers.SaveFile)
+	app.Post("/uploadPDF", handlers.SaveFile)
+
+	app.Get("/listPDF", handlers.ListFiles)
 
 	app.Listen(":3000")
 }

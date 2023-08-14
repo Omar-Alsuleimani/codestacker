@@ -1,7 +1,9 @@
 CREATE TABLE records (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    upload_time TIMESTAMP DEFAULT NOW() NOT NULL
+    upload_time TIMESTAMP DEFAULT NOW() NOT NULL,
+    numOfPages INT NOT NULL,
+    size INT NOT NULL
 );
 
 create table sentences(

@@ -44,7 +44,7 @@ func SaveFile(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Fatalln(err)
-		return sendErrorStatus(c, "Failed to open the file")
+		return sendErrorStatus(c, "Failed to initialize minio client")
 	}
 
 	//upload file to MinIO
@@ -68,25 +68,27 @@ func SaveFile(c *fiber.Ctx) error {
 	}
 	defer conn.Close(context.Background())
 
-	queries := database.New(conn)
-
-	insertedRecord, err := queries.CreateRecord(ctx, file.Filename)
-	if err != nil {
-		return sendErrorStatus(c, "Failed to create a record for the file")
-	}
-
-	//Copy the uploaded PDF data to the temporary file
 	err = c.SaveFile(file, file.Filename)
 	defer os.Remove(file.Filename)
 	if err != nil {
 		return sendErrorStatus(c, "Failed to save pdf file")
 	}
+
 	pdfFileName := file.Filename
-	fmt.Println(pdfFileName)
-	text, err := readPdf(pdfFileName)
+	reader, text, err := readPdf(pdfFileName)
 	if err != nil {
-		fmt.Println(err.Error())
 		return sendErrorStatus(c, "Failed to read pdf as text")
+	}
+
+	queries := database.New(conn)
+
+	insertedRecord, err := queries.CreateRecord(ctx, database.CreateRecordParams{
+		Name:       file.Filename,
+		Numofpages: int32(reader.NumPage()),
+		Size:       int32(file.Size),
+	})
+	if err != nil {
+		return sendErrorStatus(c, "Failed to create a record for the file")
 	}
 
 	//Split sentences and upload them to the db
@@ -105,22 +107,41 @@ func SaveFile(c *fiber.Ctx) error {
 	return c.SendString(insertedRecord.Name)
 }
 
+func ListFiles(c *fiber.Ctx) error {
+	ctx := context.Background()
+	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
+	conn, err := pgx.Connect(context.Background(), urlExample)
+	if err != nil {
+		return sendErrorStatus(c, "Failed to connect to the database")
+	}
+	defer conn.Close(context.Background())
+
+	queries := database.New(conn)
+
+	records, err := queries.ListRecords(ctx)
+	if err != nil {
+		return sendErrorStatus(c, "Failed to get the list of records")
+	}
+
+	return c.JSON(records)
+}
+
 func sendErrorStatus(c *fiber.Ctx, err string) error {
 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 		"error": err,
 	})
 }
 
-func readPdf(path string) (string, error) {
+func readPdf(path string) (*pdf.Reader, string, error) {
 	r, err := pdf.Open(path)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	var buf bytes.Buffer
 	b, err := r.GetPlainText()
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
 	buf.ReadFrom(b)
-	return buf.String(), nil
+	return r, buf.String(), nil
 }

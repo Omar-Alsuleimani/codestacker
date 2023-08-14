@@ -8,9 +8,13 @@ ORDER BY name;
 
 -- name: CreateRecord :one
 INSERT INTO records (
-  name
+  name,
+  numOfPages,
+  size
 ) VALUES (
-  $1
+  $1,
+  $2,
+  $3
 )
 RETURNING *;
 
