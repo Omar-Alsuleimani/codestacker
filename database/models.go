@@ -5,11 +5,16 @@
 package database
 
 import (
-	"database/sql"
+	"time"
 )
 
-type Author struct {
-	ID   int64
-	Name string 
-	Bio  sql.NullString
+type Record struct {
+	ID         int32
+	Name       string
+	UploadTime time.Time
+}
+
+type Sentence struct {
+	ID       int32
+	Sentence string
 }

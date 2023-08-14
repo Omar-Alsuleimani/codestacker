@@ -7,67 +7,77 @@ package database
 
 import (
 	"context"
-	"database/sql"
 )
 
-const createAuthor = `-- name: CreateAuthor :one
-INSERT INTO authors (
-  name, bio
+const createRecord = `-- name: CreateRecord :one
+INSERT INTO records (
+  name
 ) VALUES (
-  $1, $2
+  $1
 )
-RETURNING id, name, bio
+RETURNING id, name, upload_time
 `
 
-type CreateAuthorParams struct {
-	Name string
-	Bio  sql.NullString
-}
-
-func (q *Queries) CreateAuthor(ctx context.Context, arg CreateAuthorParams) (Author, error) {
-	row := q.db.QueryRow(ctx, createAuthor, arg.Name, arg.Bio)
-	var i Author
-	err := row.Scan(&i.ID, &i.Name, &i.Bio)
+func (q *Queries) CreateRecord(ctx context.Context, name string) (Record, error) {
+	row := q.db.QueryRow(ctx, createRecord, name)
+	var i Record
+	err := row.Scan(&i.ID, &i.Name, &i.UploadTime)
 	return i, err
 }
 
-const deleteAuthor = `-- name: DeleteAuthor :exec
-DELETE FROM authors
+const createSentence = `-- name: CreateSentence :one
+INSERT INTO sentences (
+  sentence
+) VALUES (
+  $1
+  )
+  RETURNING id, sentence
+`
+
+func (q *Queries) CreateSentence(ctx context.Context, sentence string) (Sentence, error) {
+	row := q.db.QueryRow(ctx, createSentence, sentence)
+	var i Sentence
+	err := row.Scan(&i.ID, &i.Sentence)
+	return i, err
+}
+
+const deleteRecord = `-- name: DeleteRecord :exec
+DELETE FROM records
 WHERE id = $1
 `
 
-func (q *Queries) DeleteAuthor(ctx context.Context, id int64) error {
-	_, err := q.db.Exec(ctx, deleteAuthor, id)
+func (q *Queries) DeleteRecord(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteRecord, id)
 	return err
 }
 
-const getAuthor = `-- name: GetAuthor :one
-SELECT id, name, bio FROM authors
+const getRecord = `-- name: GetRecord :one
+SELECT id, name, upload_time FROM records
 WHERE id = $1 LIMIT 1
 `
 
-func (q *Queries) GetAuthor(ctx context.Context, id int64) (Author, error) {
-	row := q.db.QueryRow(ctx, getAuthor, id)
-	var i Author
-	err := row.Scan(&i.ID, &i.Name, &i.Bio)
+func (q *Queries) GetRecord(ctx context.Context, id int32) (Record, error) {
+	row := q.db.QueryRow(ctx, getRecord, id)
+	var i Record
+	err := row.Scan(&i.ID, &i.Name, &i.UploadTime)
 	return i, err
 }
 
-const listAuthors = `-- name: ListAuthors :many
-SELECT id, name, bio FROM authors
+const listRecords = `-- name: ListRecords :many
+SELECT id, name, upload_time FROM records
 ORDER BY name
 `
 
-func (q *Queries) ListAuthors(ctx context.Context) ([]Author, error) {
-	rows, err := q.db.Query(ctx, listAuthors)
+func (q *Queries) ListRecords(ctx context.Context) ([]Record, error) {
+	rows, err := q.db.Query(ctx, listRecords)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Author
+	var items []Record
 	for rows.Next() {
-		var i Author
-		if err := rows.Scan(&i.ID, &i.Name, &i.Bio); err != nil {
+		var i Record
+		if err := rows.Scan(&i.ID, &i.Name, &i.UploadTime); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -78,20 +88,42 @@ func (q *Queries) ListAuthors(ctx context.Context) ([]Author, error) {
 	return items, nil
 }
 
-const updateAuthor = `-- name: UpdateAuthor :exec
-UPDATE authors
-  set name = $2,
-  bio = $3
+const listSentences = `-- name: ListSentences :many
+SELECT id, sentence FROM sentences
+`
+
+func (q *Queries) ListSentences(ctx context.Context) ([]Sentence, error) {
+	rows, err := q.db.Query(ctx, listSentences)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Sentence
+	for rows.Next() {
+		var i Sentence
+		if err := rows.Scan(&i.ID, &i.Sentence); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateRecord = `-- name: UpdateRecord :exec
+UPDATE records
+  set name = $2
 WHERE id = $1
 `
 
-type UpdateAuthorParams struct {
-	ID   int64
+type UpdateRecordParams struct {
+	ID   int32
 	Name string
-	Bio  sql.NullString
 }
 
-func (q *Queries) UpdateAuthor(ctx context.Context, arg UpdateAuthorParams) error {
-	_, err := q.db.Exec(ctx, updateAuthor, arg.ID, arg.Name, arg.Bio)
+func (q *Queries) UpdateRecord(ctx context.Context, arg UpdateRecordParams) error {
+	_, err := q.db.Exec(ctx, updateRecord, arg.ID, arg.Name)
 	return err
 }

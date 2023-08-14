@@ -13,7 +13,5 @@ func start() {
 
 	app.Post("/pdf", handlers.SaveFile)
 
-	app.Post("/author", handlers.CreateAuthor)
-
 	app.Listen(":3000")
 }
