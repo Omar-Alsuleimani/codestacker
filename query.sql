@@ -39,3 +39,6 @@ INSERT INTO sentences (
 
 -- name: ListSentences :many
 SELECT * FROM sentences;
+
+-- name: ListRecordSentences :many
+SELECT * FROM sentences where pdfId = $1;

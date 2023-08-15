@@ -15,5 +15,7 @@ func start() {
 
 	app.Get("/listPDF", handlers.ListFiles)
 
+	app.Get("/searchKeyword/:key", handlers.SearchKeyword)
+
 	app.Listen(":3000")
 }
