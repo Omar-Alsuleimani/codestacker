@@ -1,18 +1,15 @@
 package handlers
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"log"
 	"main/database"
+	"main/utils"
 	"os"
 	"strings"
 
-	"github.com/dslipak/pdf"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v4"
-	"github.com/jdkato/prose/v2"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -30,7 +27,7 @@ func SaveFile(c *fiber.Ctx) error {
 	}
 	inFile, err := file.Open()
 	if err != nil {
-		return sendErrorStatus(c, "Failed to open the pdf file")
+		return utils.SendErrorStatus(c, "Failed to open the pdf file")
 	}
 	defer inFile.Close()
 	minioEndpoint := "minio:9000"
@@ -45,7 +42,7 @@ func SaveFile(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Fatalln(err)
-		return sendErrorStatus(c, "Failed to initialize minio client")
+		return utils.SendErrorStatus(c, "Failed to initialize minio client")
 	}
 
 	//upload file to MinIO
@@ -57,28 +54,28 @@ func SaveFile(c *fiber.Ctx) error {
 	})
 	if err != nil {
 		log.Fatalln(err)
-		return sendErrorStatus(c, "Failed to upload the file to MinIO")
+		return utils.SendErrorStatus(c, "Failed to upload the file to MinIO")
 	}
 
 	//Insert record of upload into the database
-	ctx := context.Background()
+	ctx := c.Context()
 	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(context.Background(), urlExample)
+	conn, err := pgx.Connect(ctx, urlExample)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to connect to the database")
+		return utils.SendErrorStatus(c, "Failed to connect to the database")
 	}
-	defer conn.Close(context.Background())
+	defer conn.Close(ctx)
 
 	err = c.SaveFile(file, file.Filename)
 	defer os.Remove(file.Filename)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to save pdf file")
+		return utils.SendErrorStatus(c, "Failed to save pdf file")
 	}
 
 	pdfFileName := file.Filename
-	reader, text, err := readPdf(pdfFileName)
+	reader, text, err := utils.ReadPdf(pdfFileName)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to read pdf as text")
+		return utils.SendErrorStatus(c, "Failed to read pdf as text")
 	}
 
 	queries := database.New(conn)
@@ -89,32 +86,32 @@ func SaveFile(c *fiber.Ctx) error {
 		Size:       int32(file.Size),
 	})
 	if err != nil {
-		return sendErrorStatus(c, "Failed to create a record for the file")
+		return utils.SendErrorStatus(c, "Failed to create a record for the file")
 	}
 
 	//Split sentences and upload them to the db
-	err = splitAndStore(ctx, text, queries, insertedRecord, c)
+	err = utils.SplitAndStore(ctx, text, queries, insertedRecord)
 	if err != nil {
-		return err
+		return utils.SendErrorStatus(c, err.Error())
 	}
 
-	return c.SendString(insertedRecord.Name)
+	return c.JSON(fiber.Map{"File": insertedRecord.Name})
 }
 
 func ListFiles(c *fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(context.Background(), urlExample)
+	conn, err := pgx.Connect(ctx, urlExample)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to connect to the database")
+		return utils.SendErrorStatus(c, "Failed to connect to the database")
 	}
-	defer conn.Close(context.Background())
+	defer conn.Close(ctx)
 
 	queries := database.New(conn)
 
 	records, err := queries.ListRecords(ctx)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to get the list of records")
+		return utils.SendErrorStatus(c, "Failed to get the list of records")
 	}
 
 	return c.JSON(records)
@@ -122,26 +119,26 @@ func ListFiles(c *fiber.Ctx) error {
 
 func SearchKeyword(c *fiber.Ctx) error {
 	keyword := c.Params("key")
-	ctx := context.Background()
+	ctx := c.Context()
 	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(context.Background(), urlExample)
+	conn, err := pgx.Connect(ctx, urlExample)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to connect to the database")
+		return utils.SendErrorStatus(c, "Failed to connect to the database")
 	}
-	defer conn.Close(context.Background())
+	defer conn.Close(ctx)
 
 	queries := database.New(conn)
 
 	records, err := queries.ListRecords(ctx)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to get the list of records")
+		return utils.SendErrorStatus(c, "Failed to get the list of records")
 	}
 
 	result := fiber.Map{}
 	for _, record := range records {
 		sentences, err := queries.ListRecordSentences(ctx, record.ID)
 		if err != nil {
-			return sendErrorStatus(c, "Failed to get the list of sentences for record: "+fmt.Sprint(record.ID))
+			return utils.SendErrorStatus(c, "Failed to get the list of sentences for record: "+fmt.Sprint(record.ID))
 		}
 
 		containers := fiber.Map{}
@@ -173,24 +170,24 @@ func SearchKeyword(c *fiber.Ctx) error {
 }
 
 func GetPDF(c *fiber.Ctx) error {
-	ctx := context.Background()
+	ctx := c.Context()
 	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(context.Background(), urlExample)
+	conn, err := pgx.Connect(ctx, urlExample)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to connect to the database")
+		return utils.SendErrorStatus(c, "Failed to connect to the database")
 	}
-	defer conn.Close(context.Background())
+	defer conn.Close(ctx)
 
 	queries := database.New(conn)
 
 	id, err := c.ParamsInt("id", -1)
 	if err != nil || id == -1 {
-		return sendErrorStatus(c, "Invalid id provided")
+		return utils.SendErrorStatus(c, "Invalid id provided")
 	}
 
 	record, err := queries.GetRecord(ctx, int32(id))
 	if err != nil {
-		return sendErrorStatus(c, "A file with the id provided does not exist")
+		return utils.SendErrorStatus(c, "A file with the id provided does not exist")
 	}
 
 	minioEndpoint := "minio:9000"
@@ -204,7 +201,7 @@ func GetPDF(c *fiber.Ctx) error {
 		Secure: useSSL,
 	})
 	if err != nil {
-		return sendErrorStatus(c, "Failed to initialize minio client")
+		return utils.SendErrorStatus(c, "Failed to initialize minio client")
 	}
 
 	//upload file to MinIO
@@ -213,13 +210,13 @@ func GetPDF(c *fiber.Ctx) error {
 
 	file, err := minioClient.GetObject(ctx, bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
-		return sendErrorStatus(c, "Failed to get the file from MinIO")
+		return utils.SendErrorStatus(c, "Failed to get the file from MinIO")
 	}
 	defer file.Close()
 
 	localFile, err := os.Create(record.Name)
 	if err != nil {
-		return sendErrorStatus(c, "Failed to create a temporary copy of the file")
+		return utils.SendErrorStatus(c, "Failed to create a temporary copy of the file")
 	}
 	defer os.Remove(localFile.Name())
 	defer localFile.Close()
@@ -234,44 +231,4 @@ func GetPDF(c *fiber.Ctx) error {
 	}
 
 	return c.SendFile(localFile.Name())
-}
-
-func splitAndStore(ctx context.Context, text string, queries *database.Queries, insertedRecord database.Record, c *fiber.Ctx) error {
-	//Sentence package initialization.
-	doc, err := prose.NewDocument(text)
-	if err != nil {
-		return sendErrorStatus(c, "Failed to initialize tokenizer package")
-	}
-
-	//Store sentences in database.
-	for _, sentence := range doc.Sentences() {
-		_, err := queries.CreateSentence(ctx, database.CreateSentenceParams{
-			Sentence: sentence.Text,
-			Pdfid:    insertedRecord.ID,
-		})
-		if err != nil {
-			return sendErrorStatus(c, "Failed to add a sentence to the database")
-		}
-	}
-	return nil
-}
-
-func sendErrorStatus(c *fiber.Ctx, err string) error {
-	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-		"error": err,
-	})
-}
-
-func readPdf(path string) (*pdf.Reader, string, error) {
-	r, err := pdf.Open(path)
-	if err != nil {
-		return nil, "", err
-	}
-	var buf bytes.Buffer
-	b, err := r.GetPlainText()
-	if err != nil {
-		return nil, "", err
-	}
-	buf.ReadFrom(b)
-	return r, buf.String(), nil
 }
