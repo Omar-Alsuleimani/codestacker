@@ -7,11 +7,11 @@ import (
 	"log"
 	"main/database"
 	"os"
-	"strings"
 
 	"github.com/dslipak/pdf"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v4"
+	"github.com/jdkato/prose/v2"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -92,19 +92,32 @@ func SaveFile(c *fiber.Ctx) error {
 	}
 
 	//Split sentences and upload them to the db
-	sentences := strings.Split(text, ".")
-	for _, sentence := range sentences {
-		if sentence != "" {
-			_, err = queries.CreateSentence(ctx, database.CreateSentenceParams{
-				Sentence: sentence,
-				Pdfid:    insertedRecord.ID,
-			})
-			if err != nil {
-				return sendErrorStatus(c, "Failed to add sentence to the database")
-			}
+	err = splitAndStore(ctx, text, err, queries, insertedRecord, c)
+	if err != nil {
+		return err
+	}
+
+	return c.SendString(insertedRecord.Name)
+}
+
+func splitAndStore(ctx context.Context, text string, err error, queries *database.Queries, insertedRecord database.Record, c *fiber.Ctx) error {
+	//Sentence package initialization.
+	doc, err := prose.NewDocument(text)
+	if err != nil {
+		return sendErrorStatus(c, "Failed to initialize tokenizer package")
+	}
+
+	//Store sentences in database.
+	for _, sentence := range doc.Sentences() {
+		_, err := queries.CreateSentence(ctx, database.CreateSentenceParams{
+			Sentence: sentence.Text,
+			Pdfid:    insertedRecord.ID,
+		})
+		if err != nil {
+			return sendErrorStatus(c, "Failed to add a sentence to the database")
 		}
 	}
-	return c.SendString(insertedRecord.Name)
+	return nil
 }
 
 func ListFiles(c *fiber.Ctx) error {
