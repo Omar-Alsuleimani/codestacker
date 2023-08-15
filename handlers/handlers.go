@@ -7,6 +7,7 @@ import (
 	"log"
 	"main/database"
 	"os"
+	"strings"
 
 	"github.com/dslipak/pdf"
 	"github.com/gofiber/fiber/v2"
@@ -92,32 +93,12 @@ func SaveFile(c *fiber.Ctx) error {
 	}
 
 	//Split sentences and upload them to the db
-	err = splitAndStore(ctx, text, err, queries, insertedRecord, c)
+	err = splitAndStore(ctx, text, queries, insertedRecord, c)
 	if err != nil {
 		return err
 	}
 
 	return c.SendString(insertedRecord.Name)
-}
-
-func splitAndStore(ctx context.Context, text string, err error, queries *database.Queries, insertedRecord database.Record, c *fiber.Ctx) error {
-	//Sentence package initialization.
-	doc, err := prose.NewDocument(text)
-	if err != nil {
-		return sendErrorStatus(c, "Failed to initialize tokenizer package")
-	}
-
-	//Store sentences in database.
-	for _, sentence := range doc.Sentences() {
-		_, err := queries.CreateSentence(ctx, database.CreateSentenceParams{
-			Sentence: sentence.Text,
-			Pdfid:    insertedRecord.ID,
-		})
-		if err != nil {
-			return sendErrorStatus(c, "Failed to add a sentence to the database")
-		}
-	}
-	return nil
 }
 
 func ListFiles(c *fiber.Ctx) error {
@@ -137,6 +118,78 @@ func ListFiles(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(records)
+}
+
+func SearchKeyword(c *fiber.Ctx) error {
+	keyword := c.Params("key")
+	ctx := context.Background()
+	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
+	conn, err := pgx.Connect(context.Background(), urlExample)
+	if err != nil {
+		return sendErrorStatus(c, "Failed to connect to the database")
+	}
+	defer conn.Close(context.Background())
+
+	queries := database.New(conn)
+
+	records, err := queries.ListRecords(ctx)
+	if err != nil {
+		return sendErrorStatus(c, "Failed to get the list of records")
+	}
+
+	result := fiber.Map{}
+	for _, record := range records {
+		sentences, err := queries.ListRecordSentences(ctx, record.ID)
+		if err != nil {
+			return sendErrorStatus(c, "Failed to get the list of sentences for record: "+fmt.Sprint(record.ID))
+		}
+
+		containers := fiber.Map{}
+		i := 1
+		for _, sentence := range sentences {
+
+			isContained := false
+			for _, word := range strings.Split(strings.TrimSpace(sentence.Sentence), " ") {
+				if strings.ToLower(word) == strings.ToLower(keyword) {
+					isContained = true
+					break
+				}
+			}
+			if isContained {
+				containers[fmt.Sprint(i)] = sentence.Sentence
+				i++
+			}
+		}
+
+		if len(containers) > 0 {
+			result[fmt.Sprintf("PDF ID %d", record.ID)] = containers
+		}
+	}
+
+	if len(result) == 0 {
+		return c.JSON("Not found")
+	}
+	return c.JSON(result)
+}
+
+func splitAndStore(ctx context.Context, text string, queries *database.Queries, insertedRecord database.Record, c *fiber.Ctx) error {
+	//Sentence package initialization.
+	doc, err := prose.NewDocument(text)
+	if err != nil {
+		return sendErrorStatus(c, "Failed to initialize tokenizer package")
+	}
+
+	//Store sentences in database.
+	for _, sentence := range doc.Sentences() {
+		_, err := queries.CreateSentence(ctx, database.CreateSentenceParams{
+			Sentence: sentence.Text,
+			Pdfid:    insertedRecord.ID,
+		})
+		if err != nil {
+			return sendErrorStatus(c, "Failed to add a sentence to the database")
+		}
+	}
+	return nil
 }
 
 func sendErrorStatus(c *fiber.Ctx, err string) error {

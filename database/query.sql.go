@@ -92,6 +92,30 @@ func (q *Queries) GetRecord(ctx context.Context, id int32) (Record, error) {
 	return i, err
 }
 
+const listRecordSentences = `-- name: ListRecordSentences :many
+SELECT id, sentence, pdfid FROM sentences where pdfId = $1
+`
+
+func (q *Queries) ListRecordSentences(ctx context.Context, pdfid int32) ([]Sentence, error) {
+	rows, err := q.db.Query(ctx, listRecordSentences, pdfid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Sentence
+	for rows.Next() {
+		var i Sentence
+		if err := rows.Scan(&i.ID, &i.Sentence, &i.Pdfid); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecords = `-- name: ListRecords :many
 SELECT id, name, upload_time, numofpages, size FROM records
 ORDER BY name
