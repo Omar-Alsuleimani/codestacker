@@ -17,5 +17,7 @@ func start() {
 
 	app.Get("/searchKeyword/:key", handlers.SearchKeyword)
 
+	app.Get("/getPDF/:id", handlers.GetPDF)
+
 	app.Listen(":3000")
 }
