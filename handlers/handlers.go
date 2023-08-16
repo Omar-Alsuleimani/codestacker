@@ -306,3 +306,65 @@ func GetOccurrence(c *fiber.Ctx) error {
 
 	return c.JSON(result)
 }
+
+func GetMostOccurring(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id", -1)
+	if id == -1 || err != nil {
+		return utils.SendBadRequestStatus(c, "Id invalid or not provided")
+	}
+
+	ctx := c.Context()
+	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
+	conn, err := pgx.Connect(ctx, urlExample)
+	if err != nil {
+		return utils.SendErrorStatus(c, "Failed to connect to the database")
+	}
+	defer conn.Close(ctx)
+
+	queries := database.New(conn)
+
+	sentences, err := queries.ListRecordSentences(ctx, int32(id))
+	if err != nil {
+		return utils.SendErrorStatus(c, "Failed to retrieve the list of sentences for the selected fil")
+	}
+
+	text := ""
+	for _, sentence := range sentences {
+		trim := strings.TrimSpace(sentence.Sentence)
+		if trim != "" {
+			text += trim + " "
+		}
+	}
+
+	trim := strings.TrimSpace(text)
+	filteredWords := utils.CountFilteredWords(trim)
+	topFive := map[int]string{}
+
+	for key, value := range filteredWords {
+		if topFive[1] == "" || value > utils.ExtractFrequency(topFive[1]) {
+			utils.ShiftAndUpdateTopFive(1, key, value, &topFive)
+			continue
+		}
+
+		if value > utils.ExtractFrequency(topFive[2]) {
+			utils.ShiftAndUpdateTopFive(2, key, value, &topFive)
+			continue
+		}
+
+		if value > utils.ExtractFrequency(topFive[3]) {
+			utils.ShiftAndUpdateTopFive(3, key, value, &topFive)
+			continue
+		}
+
+		if value > utils.ExtractFrequency(topFive[4]) {
+			utils.ShiftAndUpdateTopFive(4, key, value, &topFive)
+			continue
+		}
+
+		if value > utils.ExtractFrequency(topFive[5]) {
+			utils.ShiftAndUpdateTopFive(5, key, value, &topFive)
+		}
+	}
+
+	return c.JSON(topFive)
+}
