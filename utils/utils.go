@@ -36,6 +36,12 @@ func SendErrorStatus(c *fiber.Ctx, err string) error {
 	})
 }
 
+func SendBadRequestStatus(c *fiber.Ctx, err string) error {
+	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		"error": err,
+	})
+}
+
 func ReadPdf(path string) (*pdf.Reader, string, error) {
 	r, err := pdf.Open(path)
 	if err != nil {
