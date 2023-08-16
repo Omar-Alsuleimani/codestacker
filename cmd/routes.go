@@ -19,5 +19,7 @@ func start() {
 
 	app.Get("/getPDF/:id", handlers.GetPDF)
 
+	app.Get("/getOccurrence/:id/:key", handlers.GetOccurrence)
+
 	app.Listen(":3000")
 }
