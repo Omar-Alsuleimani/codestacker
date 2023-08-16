@@ -23,5 +23,7 @@ func start() {
 
 	app.Get("/getOccurrence/:id/:key", handlers.GetOccurrence)
 
+	app.Get("/getMostOccurring/:id", handlers.GetMostOccurring)
+
 	app.Listen(":3000")
 }
