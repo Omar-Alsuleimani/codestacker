@@ -233,6 +233,29 @@ func GetPDF(c *fiber.Ctx) error {
 	return c.SendFile(localFile.Name())
 }
 
+func ListSentences(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id", -1)
+	if err != nil || id == -1 {
+		return utils.SendBadRequestStatus(c, "Id invalid or not provided")
+	}
+
+	ctx := c.Context()
+	url := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
+	conn, err := pgx.Connect(ctx, url)
+	if err != nil {
+		return utils.SendErrorStatus(c, "Failed to connect to the database")
+	}
+
+	queries := database.New(conn)
+
+	sentences, err := queries.ListRecordSentences(ctx, int32(id))
+	if err != nil {
+		return utils.SendErrorStatus(c, "Failed to retrieve the list of sentences for the selected file")
+	}
+
+	return c.JSON(sentences)
+}
+
 func GetOccurrence(c *fiber.Ctx) error {
 	id, err := c.ParamsInt("id", -1)
 	if id == -1 || err != nil {
