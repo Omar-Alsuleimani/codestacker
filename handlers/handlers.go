@@ -232,3 +232,54 @@ func GetPDF(c *fiber.Ctx) error {
 
 	return c.SendFile(localFile.Name())
 }
+
+func GetOccurrence(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id", -1)
+	if id == -1 || err != nil {
+		return utils.SendBadRequestStatus(c, "Id invalid or not provided")
+	}
+
+	keyword := c.Params("key")
+	if keyword == "" {
+		return utils.SendBadRequestStatus(c, "Keyword invalid or not provided")
+	}
+
+	ctx := c.Context()
+	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
+	conn, err := pgx.Connect(ctx, urlExample)
+	if err != nil {
+		return utils.SendErrorStatus(c, "Failed to connect to the database")
+	}
+	defer conn.Close(ctx)
+
+	queries := database.New(conn)
+
+	sentences, err := queries.ListRecordSentences(ctx, int32(id))
+	if err != nil {
+		return utils.SendErrorStatus(c, "Failed to retrieve the list of sentences for the selected file")
+	}
+
+	count := 0
+	result := fiber.Map{}
+	foundIn := map[string]string{}
+	for index, sentence := range sentences {
+
+		words := strings.Split(strings.TrimSpace(sentence.Sentence), " ")
+		found := false
+		for _, word := range words {
+
+			if strings.ToLower(word) == strings.ToLower(keyword) {
+				count++
+				found = true
+			}
+		}
+		if found {
+			foundIn[fmt.Sprintf("Sentence %d", index)] = sentence.Sentence
+		}
+	}
+
+	result["Count"] = count
+	result["Found in"] = foundIn
+
+	return c.JSON(result)
+}
