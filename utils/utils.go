@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"image/jpeg"
+	"io"
 	"log"
 	"main/database"
 	"os"
@@ -21,12 +22,113 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
-func SplitAndStore(ctx context.Context, text string, queries *database.Queries, insertedRecord database.Record) error {
+func GetWelcome() fiber.Map {
+	return fiber.Map{
+		"To upload a PDF":                                        "POST /uploadPDF",
+		"To get a list of uploaded PDFs":                         "GET /listPDF",
+		"To get a list of sentences in a PDF":                    "GET /listSentences/:id",
+		"To search for the occurrences of a keyword in all PDFs": "GET /searchKeyword/:word",
+		"To download a PDF":                                      "GET /getPDF/:id",
+		"To get an image of a page in a PDF":                     "GET /getPDF/:id/:page",
+		"To check the number of occurrences of a word in a PDF":  "GET /getOccurrences/:id/:word",
+		"To get the top 5 occuring words in a PDF":               "GET /getMostOccurring/:id",
+	}
+}
+
+func getMinioClient() (*minio.Client, error) {
+	minioEndpoint := "minio:9000"
+	minioAccessKey := "minioadmin"
+	minioSecretKey := "minioadmin"
+	useSSL := false
+
+	// Initialize MinIO client
+	return minio.New(minioEndpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(minioAccessKey, minioSecretKey, ""),
+		Secure: useSSL,
+	})
+}
+
+func UploadPDF(ctx context.Context, bucketName string, objectName string, inFile io.Reader) error {
+	minioClient, err := getMinioClient()
+	if err != nil {
+		return err
+	}
+
+	_, err = minioClient.PutObject(ctx, bucketName, objectName, inFile, -1, minio.PutObjectOptions{
+		ContentType: "application/pdf",
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getQueriesConnection(ctx context.Context) (*pgx.Conn, *database.Queries, error) {
+	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
+	conn, err := pgx.Connect(ctx, urlExample)
+	if err != nil {
+		return nil, nil, err
+	}
+	return conn, database.New(conn), nil
+}
+
+func CreateRecord(ctx context.Context, name string, pages int32, size int32) (database.Record, error) {
+	conn, queries, err := getQueriesConnection(ctx)
+	if err != nil {
+		return database.Record{}, err
+	}
+	defer conn.Close(ctx)
+
+	return queries.CreateRecord(ctx, database.CreateRecordParams{
+		Name:       name,
+		Numofpages: pages,
+		Size:       size,
+	})
+}
+
+func GetRecord(ctx context.Context, id int32) (database.Record, error) {
+	conn, queries, err := getQueriesConnection(ctx)
+	if err != nil {
+		return database.Record{}, err
+	}
+	defer conn.Close(ctx)
+
+	return queries.GetRecord(ctx, id)
+}
+
+func ListRecords(ctx context.Context) ([]database.Record, error) {
+	conn, queries, err := getQueriesConnection(ctx)
+	if err != nil {
+		return []database.Record{}, err
+	}
+	defer conn.Close(ctx)
+
+	return queries.ListRecords(ctx)
+}
+
+func ListRecordSentences(ctx context.Context, id int32) ([]database.Sentence, error) {
+	conn, queries, err := getQueriesConnection(ctx)
+	if err != nil {
+		return []database.Sentence{}, err
+	}
+	defer conn.Close(ctx)
+
+	return queries.ListRecordSentences(ctx, id)
+}
+
+func SplitAndStore(ctx context.Context, text string, insertedRecord database.Record) error {
 	//Sentence package initialization.
 	doc, err := prose.NewDocument(text)
 	if err != nil {
 		return err
 	}
+
+	conn, queries, err := getQueriesConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close(ctx)
 
 	//Store sentences in database.
 	for _, sentence := range doc.Sentences() {
@@ -154,30 +256,13 @@ func CopyPDF(c *fiber.Ctx) (string, error) {
 	}
 
 	ctx := c.Context()
-	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(ctx, urlExample)
-	if err != nil {
-		return "", SendErrorStatus(c, "Failed to connect to the database")
-	}
-	defer conn.Close(ctx)
-
-	queries := database.New(conn)
-
-	record, err := queries.GetRecord(ctx, int32(id))
+	record, err := GetRecord(ctx, int32(id))
 	if err != nil {
 		return "", SendErrorStatus(c, "A file with the id provided does not exist")
 	}
 
-	minioEndpoint := "minio:9000"
-	minioAccessKey := "minioadmin"
-	minioSecretKey := "minioadmin"
-	useSSL := false
-
 	// Initialize MinIO client
-	minioClient, err := minio.New(minioEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(minioAccessKey, minioSecretKey, ""),
-		Secure: useSSL,
-	})
+	minioClient, err := getMinioClient()
 	if err != nil {
 		return "", SendErrorStatus(c, "Failed to initialize minio client")
 	}

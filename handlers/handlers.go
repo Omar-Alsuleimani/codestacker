@@ -2,20 +2,15 @@ package handlers
 
 import (
 	"fmt"
-	"log"
-	"main/database"
 	"main/utils"
 	"os"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v4"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 func Home(c *fiber.Ctx) error {
-	return c.SendString("Hello, Omar!")
+	return c.JSON(utils.GetWelcome())
 }
 
 func SaveFile(c *fiber.Ctx) error {
@@ -30,42 +25,14 @@ func SaveFile(c *fiber.Ctx) error {
 		return utils.SendErrorStatus(c, "Failed to open the pdf file")
 	}
 	defer inFile.Close()
-	minioEndpoint := "minio:9000"
-	minioAccessKey := "minioadmin"
-	minioSecretKey := "minioadmin"
-	useSSL := false
 
-	// Initialize MinIO client
-	minioClient, err := minio.New(minioEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(minioAccessKey, minioSecretKey, ""),
-		Secure: useSSL,
-	})
+	ctx := c.Context()
+	err = utils.UploadPDF(ctx, "pdf", file.Filename, inFile)
 	if err != nil {
-		log.Fatalln(err)
-		return utils.SendErrorStatus(c, "Failed to initialize minio client")
-	}
-
-	//upload file to MinIO
-	bucketName := "pdf"
-	objectName := file.Filename
-	contentType := "application/pdf"
-	_, err = minioClient.PutObject(c.Context(), bucketName, objectName, inFile, -1, minio.PutObjectOptions{
-		ContentType: contentType,
-	})
-	if err != nil {
-		log.Fatalln(err)
-		return utils.SendErrorStatus(c, "Failed to upload the file to MinIO")
+		return utils.SendErrorStatus(c, "Failed to upload the pdf file to MinIO")
 	}
 
 	//Insert record of upload into the database
-	ctx := c.Context()
-	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(ctx, urlExample)
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to connect to the database")
-	}
-	defer conn.Close(ctx)
-
 	err = c.SaveFile(file, file.Filename)
 	defer os.Remove(file.Filename)
 	if err != nil {
@@ -78,38 +45,22 @@ func SaveFile(c *fiber.Ctx) error {
 		return utils.SendErrorStatus(c, "Failed to read pdf as text")
 	}
 
-	queries := database.New(conn)
-
-	insertedRecord, err := queries.CreateRecord(ctx, database.CreateRecordParams{
-		Name:       file.Filename,
-		Numofpages: int32(reader.NumPage()),
-		Size:       int32(file.Size),
-	})
+	insertedRecord, err := utils.CreateRecord(ctx, file.Filename, int32(reader.NumPage()), int32(file.Size))
 	if err != nil {
 		return utils.SendErrorStatus(c, "Failed to create a record for the file")
 	}
 
 	//Split sentences and upload them to the db
-	err = utils.SplitAndStore(ctx, text, queries, insertedRecord)
+	err = utils.SplitAndStore(ctx, text, insertedRecord)
 	if err != nil {
 		return utils.SendErrorStatus(c, err.Error())
 	}
 
-	return c.JSON(fiber.Map{"File": insertedRecord.Name})
+	return c.JSON(fiber.Map{"Id": insertedRecord.ID, "File": insertedRecord.Name})
 }
 
 func ListFiles(c *fiber.Ctx) error {
-	ctx := c.Context()
-	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(ctx, urlExample)
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to connect to the database")
-	}
-	defer conn.Close(ctx)
-
-	queries := database.New(conn)
-
-	records, err := queries.ListRecords(ctx)
+	records, err := utils.ListRecords(c.Context())
 	if err != nil {
 		return utils.SendErrorStatus(c, "Failed to get the list of records")
 	}
@@ -119,24 +70,19 @@ func ListFiles(c *fiber.Ctx) error {
 
 func SearchKeyword(c *fiber.Ctx) error {
 	keyword := c.Params("key")
-	ctx := c.Context()
-	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(ctx, urlExample)
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to connect to the database")
+	if keyword == "" {
+		return utils.SendBadRequestStatus(c, "Invalid keyword")
 	}
-	defer conn.Close(ctx)
 
-	queries := database.New(conn)
-
-	records, err := queries.ListRecords(ctx)
+	ctx := c.Context()
+	records, err := utils.ListRecords(ctx)
 	if err != nil {
 		return utils.SendErrorStatus(c, "Failed to get the list of records")
 	}
 
 	result := fiber.Map{}
 	for _, record := range records {
-		sentences, err := queries.ListRecordSentences(ctx, record.ID)
+		sentences, err := utils.ListRecordSentences(ctx, record.ID)
 		if err != nil {
 			return utils.SendErrorStatus(c, "Failed to get the list of sentences for record: "+fmt.Sprint(record.ID))
 		}
@@ -186,15 +132,7 @@ func ListSentences(c *fiber.Ctx) error {
 	}
 
 	ctx := c.Context()
-	url := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(ctx, url)
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to connect to the database")
-	}
-
-	queries := database.New(conn)
-
-	sentences, err := queries.ListRecordSentences(ctx, int32(id))
+	sentences, err := utils.ListRecordSentences(ctx, int32(id))
 	if err != nil {
 		return utils.SendErrorStatus(c, "Failed to retrieve the list of sentences for the selected file")
 	}
@@ -214,16 +152,7 @@ func GetOccurrence(c *fiber.Ctx) error {
 	}
 
 	ctx := c.Context()
-	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(ctx, urlExample)
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to connect to the database")
-	}
-	defer conn.Close(ctx)
-
-	queries := database.New(conn)
-
-	sentences, err := queries.ListRecordSentences(ctx, int32(id))
+	sentences, err := utils.ListRecordSentences(ctx, int32(id))
 	if err != nil {
 		return utils.SendErrorStatus(c, "Failed to retrieve the list of sentences for the selected file")
 	}
@@ -260,16 +189,7 @@ func GetMostOccurring(c *fiber.Ctx) error {
 	}
 
 	ctx := c.Context()
-	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(ctx, urlExample)
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to connect to the database")
-	}
-	defer conn.Close(ctx)
-
-	queries := database.New(conn)
-
-	sentences, err := queries.ListRecordSentences(ctx, int32(id))
+	sentences, err := utils.ListRecordSentences(ctx, int32(id))
 	if err != nil {
 		return utils.SendErrorStatus(c, "Failed to retrieve the list of sentences for the selected fil")
 	}
