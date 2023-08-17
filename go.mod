@@ -44,6 +44,7 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
+	github.com/bbalet/stopwords v1.0.0
 	github.com/dslipak/pdf v0.0.1
 	github.com/gen2brain/go-fitz v1.22.2
 	github.com/gofiber/fiber/v2 v2.48.0 // indirect
