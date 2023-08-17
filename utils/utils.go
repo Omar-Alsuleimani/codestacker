@@ -4,15 +4,21 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image/jpeg"
 	"log"
 	"main/database"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/dslipak/pdf"
+	"github.com/gen2brain/go-fitz"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v4"
 	"github.com/jdkato/prose/v2"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 func SplitAndStore(ctx context.Context, text string, queries *database.Queries, insertedRecord database.Record) error {
@@ -139,4 +145,95 @@ func ShiftAndUpdateTopFive(index int, key string, value int, topFive *map[int]st
 		(*topFive)[i] = (*topFive)[i-1]
 	}
 	(*topFive)[index] = fmt.Sprintf("%s: %d times", key, value)
+}
+
+func CopyPDF(c *fiber.Ctx) (string, error) {
+	id, err := c.ParamsInt("id", -1)
+	if err != nil || id == -1 {
+		return "", SendErrorStatus(c, "Invalid id provided")
+	}
+
+	ctx := c.Context()
+	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
+	conn, err := pgx.Connect(ctx, urlExample)
+	if err != nil {
+		return "", SendErrorStatus(c, "Failed to connect to the database")
+	}
+	defer conn.Close(ctx)
+
+	queries := database.New(conn)
+
+	record, err := queries.GetRecord(ctx, int32(id))
+	if err != nil {
+		return "", SendErrorStatus(c, "A file with the id provided does not exist")
+	}
+
+	minioEndpoint := "minio:9000"
+	minioAccessKey := "minioadmin"
+	minioSecretKey := "minioadmin"
+	useSSL := false
+
+	// Initialize MinIO client
+	minioClient, err := minio.New(minioEndpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(minioAccessKey, minioSecretKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		return "", SendErrorStatus(c, "Failed to initialize minio client")
+	}
+
+	//download file from MinIO
+	bucketName := "pdf"
+	objectName := record.Name
+
+	file, err := minioClient.GetObject(ctx, bucketName, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		return "", SendErrorStatus(c, "Failed to get the file from MinIO")
+	}
+	defer file.Close()
+
+	localFile, err := os.Create(record.Name)
+	if err != nil {
+		return "", SendErrorStatus(c, "Failed to create a temporary copy of the file")
+	}
+	defer localFile.Close()
+
+	buffer := make([]byte, 1024)
+	for {
+		n, err := file.Read(buffer)
+		if err != nil {
+			break
+		}
+		localFile.Write(buffer[:n])
+	}
+
+	return localFile.Name(), nil
+}
+
+func ConvertPDFPageToImage(pdfPath, imagePath string, pageNum int) error {
+
+	doc, err := fitz.New(pdfPath)
+	if err != nil {
+		return err
+	}
+	defer doc.Close()
+
+	img, err := doc.Image(pageNum - 1) // Pages are 0-indexed
+	if err != nil {
+		return err
+	}
+
+	file, err := os.Create(imagePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	err = jpeg.Encode(file, img, &jpeg.Options{Quality: jpeg.DefaultQuality})
+	if err != nil {
+		os.Remove(imagePath)
+		return err
+	}
+
+	return nil
 }

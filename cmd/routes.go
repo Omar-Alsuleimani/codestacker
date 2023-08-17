@@ -25,5 +25,7 @@ func start() {
 
 	app.Get("/getMostOccurring/:id", handlers.GetMostOccurring)
 
+	app.Get("/getPDF/:id/:page", handlers.GetPdfPage)
+
 	app.Listen(":3000")
 }
