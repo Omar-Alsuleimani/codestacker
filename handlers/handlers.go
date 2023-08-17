@@ -170,67 +170,13 @@ func SearchKeyword(c *fiber.Ctx) error {
 }
 
 func GetPDF(c *fiber.Ctx) error {
-	ctx := c.Context()
-	urlExample := fmt.Sprintf("postgres://%s:%s@db:5432", os.Getenv("DB_USER"), os.Getenv("DB_NAME"))
-	conn, err := pgx.Connect(ctx, urlExample)
+	localFile, err := utils.CopyPDF(c)
 	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to connect to the database")
+		return err
 	}
-	defer conn.Close(ctx)
+	defer os.Remove(localFile)
 
-	queries := database.New(conn)
-
-	id, err := c.ParamsInt("id", -1)
-	if err != nil || id == -1 {
-		return utils.SendErrorStatus(c, "Invalid id provided")
-	}
-
-	record, err := queries.GetRecord(ctx, int32(id))
-	if err != nil {
-		return utils.SendErrorStatus(c, "A file with the id provided does not exist")
-	}
-
-	minioEndpoint := "minio:9000"
-	minioAccessKey := "minioadmin"
-	minioSecretKey := "minioadmin"
-	useSSL := false
-
-	// Initialize MinIO client
-	minioClient, err := minio.New(minioEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(minioAccessKey, minioSecretKey, ""),
-		Secure: useSSL,
-	})
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to initialize minio client")
-	}
-
-	//upload file to MinIO
-	bucketName := "pdf"
-	objectName := record.Name
-
-	file, err := minioClient.GetObject(ctx, bucketName, objectName, minio.GetObjectOptions{})
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to get the file from MinIO")
-	}
-	defer file.Close()
-
-	localFile, err := os.Create(record.Name)
-	if err != nil {
-		return utils.SendErrorStatus(c, "Failed to create a temporary copy of the file")
-	}
-	defer os.Remove(localFile.Name())
-	defer localFile.Close()
-
-	buffer := make([]byte, 1024)
-	for {
-		n, err := file.Read(buffer)
-		if err != nil {
-			break
-		}
-		localFile.Write(buffer[:n])
-	}
-
-	return c.SendFile(localFile.Name())
+	return c.SendFile(localFile)
 }
 
 func ListSentences(c *fiber.Ctx) error {
@@ -367,4 +313,27 @@ func GetMostOccurring(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(topFive)
+}
+
+func GetPdfPage(c *fiber.Ctx) error {
+	page, err := c.ParamsInt("page", -1)
+	if err != nil || page <= -1 {
+		return utils.SendBadRequestStatus(c, "Page invalid")
+	}
+
+	localFile, err := utils.CopyPDF(c)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(localFile)
+
+	imageFile := "output.png"
+
+	err = utils.ConvertPDFPageToImage(localFile, imageFile, page)
+	if err != nil {
+		return utils.SendErrorStatus(c, "Failed to convert pdf page to an image")
+	}
+	defer os.Remove(imageFile)
+
+	return c.SendFile(imageFile)
 }

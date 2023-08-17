@@ -5,6 +5,7 @@ go 1.19
 require github.com/jackc/pgx/v4 v4.18.1
 
 require (
+	github.com/aybabtme/rgbterm v0.0.0-20170906152045-cc83f3b3ce59 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -22,12 +23,14 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rs/xid v1.5.0 // indirect
 	github.com/stretchr/testify v1.8.1 // indirect
 	github.com/unidoc/pkcs7 v0.2.0 // indirect
 	github.com/unidoc/timestamp v0.0.0-20200412005513-91597fd3793a // indirect
 	github.com/unidoc/unitype v0.2.1 // indirect
+	github.com/wayneashleyberry/terminal-dimensions v1.1.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	golang.org/x/image v0.5.0 // indirect
 	golang.org/x/net v0.12.0 // indirect
@@ -42,6 +45,7 @@ require (
 require (
 	github.com/andybalholm/brotli v1.0.5 // indirect
 	github.com/dslipak/pdf v0.0.1
+	github.com/gen2brain/go-fitz v1.22.2
 	github.com/gofiber/fiber/v2 v2.48.0 // indirect
 	github.com/golang-migrate/migrate/v4 v4.16.2
 	github.com/google/uuid v1.3.0 // indirect
@@ -66,6 +70,7 @@ require (
 	github.com/neurosnap/sentences v1.1.2
 	github.com/pdfcpu/pdfcpu v0.4.2
 	github.com/pkg/errors v0.9.1
+	github.com/qeesung/image2ascii v1.0.1
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/sirupsen/logrus v1.9.3
 	github.com/unidoc/unipdf/v3 v3.49.0
