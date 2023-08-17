@@ -27,7 +27,7 @@ func start() {
 
 	app.Get("/getPDF/:id/:page", handlers.GetPdfPage)
 
-	app.Post("/deletePDF", handlers.DeleteFile)
+	app.Delete("/deletePDF", handlers.DeleteFile)
 
 	app.Listen(":3000")
 }
