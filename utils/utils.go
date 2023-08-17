@@ -118,6 +118,21 @@ func ListRecordSentences(ctx context.Context, id int32) ([]database.Sentence, er
 	return queries.ListRecordSentences(ctx, id)
 }
 
+func deleteRecord(ctx context.Context, name string) error {
+	conn, queries, err := getQueriesConnection(ctx)
+	if err != nil {
+		return err
+	}
+	defer conn.Close(ctx)
+
+	err = queries.DeleteRecord(ctx, name)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func SplitAndStore(ctx context.Context, text string, insertedRecord database.Record) error {
 	//Sentence package initialization.
 	doc, err := prose.NewDocument(text)
@@ -286,6 +301,32 @@ func ConvertPDFPageToImage(pdfPath, imagePath string, pageNum int) error {
 	if err != nil {
 		os.Remove(imagePath)
 		return err
+	}
+
+	return nil
+}
+
+func DeletePDF(ctx context.Context, name string) error {
+	minioClient, err := getMinioClient()
+	if err != nil {
+		return fmt.Errorf("minio")
+	}
+
+	file, err := minioClient.GetObject(ctx, "pdf", name, minio.GetObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("minio")
+	}
+	defer file.Close()
+
+	err = minioClient.RemoveObject(ctx, "pdf", name, minio.RemoveObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("minio")
+	}
+
+	err = deleteRecord(ctx, name)
+	if err != nil {
+		UploadPDF(ctx, "pdf", name, file)
+		return fmt.Errorf("db")
 	}
 
 	return nil

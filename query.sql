@@ -20,7 +20,7 @@ RETURNING *;
 
 -- name: DeleteRecord :exec
 DELETE FROM records
-WHERE id = $1;
+WHERE name = $1;
 
 -- name: UpdateRecord :exec
 UPDATE records

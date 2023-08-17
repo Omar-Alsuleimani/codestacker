@@ -66,11 +66,11 @@ func (q *Queries) CreateSentence(ctx context.Context, arg CreateSentenceParams) 
 
 const deleteRecord = `-- name: DeleteRecord :exec
 DELETE FROM records
-WHERE id = $1
+WHERE name = $1
 `
 
-func (q *Queries) DeleteRecord(ctx context.Context, id int32) error {
-	_, err := q.db.Exec(ctx, deleteRecord, id)
+func (q *Queries) DeleteRecord(ctx context.Context, name string) error {
+	_, err := q.db.Exec(ctx, deleteRecord, name)
 	return err
 }
 

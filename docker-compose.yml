@@ -33,8 +33,6 @@ services:
     command: server --console-address ":9090" /minio/mnt/data
     volumes:
       - minio_data:/data
-      - minio_config:/root/.minio
 volumes:
   minio_data:
-  minio_config:
   postgres-db:

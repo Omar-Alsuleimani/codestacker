@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"main/utils"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
@@ -256,4 +257,35 @@ func GetPdfPage(c *fiber.Ctx) error {
 	defer os.Remove(imageFile)
 
 	return c.SendFile(imageFile)
+}
+
+func DeleteFile(c *fiber.Ctx) error {
+	in := c.FormValue("id")
+	id, err := strconv.Atoi(in)
+	if err != nil {
+		return utils.SendBadRequestStatus(c, "Invalid input")
+	}
+
+	if id <= -1 {
+		return utils.SendBadRequestStatus(c, "Invalid id")
+	}
+
+	ctx := c.Context()
+	record, err := utils.GetRecord(ctx, int32(id))
+	if err != nil {
+		return utils.SendErrorStatus(c, "Failed to get the pdf details from the database")
+	}
+
+	pdfName := record.Name
+	err = utils.DeletePDF(ctx, pdfName)
+	if err != nil {
+		switch err.Error() {
+		case "minio":
+			return utils.SendErrorStatus(c, "Failed to delete the file from MinIO")
+		case "db":
+			return utils.SendErrorStatus(c, "Failed to delete the file details from the database")
+		}
+	}
+
+	return c.JSON(fiber.Map{"success": "pdf deleted without errors"})
 }
