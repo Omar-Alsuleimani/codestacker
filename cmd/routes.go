@@ -11,6 +11,8 @@ func start() {
 
 	app.Get("/", handlers.Home)
 
+	app.Use(handlers.BasicAuthMiddleware("username", "password"))
+
 	app.Post("/uploadPDF", handlers.SaveFile)
 
 	app.Get("/listPDF", handlers.ListFiles)

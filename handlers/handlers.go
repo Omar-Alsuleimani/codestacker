@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"fmt"
 	"main/utils"
 	"os"
@@ -117,9 +118,14 @@ func SearchKeyword(c *fiber.Ctx) error {
 }
 
 func GetPDF(c *fiber.Ctx) error {
-	localFile, err := utils.CopyPDF(c)
+	id, err := c.ParamsInt("id", -1)
+	if err != nil || id == -1 {
+		return utils.SendBadRequestStatus(c, "Invalid id provided")
+	}
+
+	localFile, err := utils.CopyPDF(id)
 	if err != nil {
-		return err
+		return utils.SendErrorStatus(c, localFile)
 	}
 	defer os.Remove(localFile)
 
@@ -237,14 +243,19 @@ func GetMostOccurring(c *fiber.Ctx) error {
 }
 
 func GetPdfPage(c *fiber.Ctx) error {
+	id, err := c.ParamsInt("id", -1)
+	if err != nil || id == -1 {
+		return utils.SendBadRequestStatus(c, "Invalid id provided")
+	}
+
 	page, err := c.ParamsInt("page", -1)
 	if err != nil || page <= -1 {
 		return utils.SendBadRequestStatus(c, "Page invalid")
 	}
 
-	localFile, err := utils.CopyPDF(c)
+	localFile, err := utils.CopyPDF(id)
 	if err != nil {
-		return err
+		return utils.SendErrorStatus(c, localFile)
 	}
 	defer os.Remove(localFile)
 
@@ -288,4 +299,29 @@ func DeleteFile(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(fiber.Map{"success": "pdf deleted without errors"})
+}
+
+func BasicAuthMiddleware(username, password string) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		auth := c.Get(fiber.HeaderAuthorization)
+		if auth == "" {
+			c.Status(fiber.StatusUnauthorized)
+			return c.SendString("Unauthorized")
+		}
+
+		encodedCredentials := strings.TrimPrefix(auth, "Basic ")
+		credentials, err := base64.StdEncoding.DecodeString(encodedCredentials)
+		if err != nil {
+			c.Status(fiber.StatusUnauthorized)
+			return c.SendString("Unauthorized\n")
+		}
+
+		credentialsParts := strings.SplitN(string(credentials), ":", 2)
+		if len(credentialsParts) != 2 || credentialsParts[0] != username || credentialsParts[1] != password {
+			c.Status(fiber.StatusUnauthorized)
+			return c.SendString("Unauthorized\n")
+		}
+
+		return c.Next()
+	}
 }
