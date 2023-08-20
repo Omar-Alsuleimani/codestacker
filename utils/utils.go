@@ -232,22 +232,17 @@ func ShiftAndUpdateTopFive(index int, key string, value int, topFive *map[int]st
 	(*topFive)[index] = fmt.Sprintf("%s: %d times", key, value)
 }
 
-func CopyPDF(c *fiber.Ctx) (string, error) {
-	id, err := c.ParamsInt("id", -1)
-	if err != nil || id == -1 {
-		return "", SendErrorStatus(c, "Invalid id provided")
-	}
-
-	ctx := c.Context()
+func CopyPDF(id int) (string, error) {
+	ctx := context.Background()
 	record, err := GetRecord(ctx, int32(id))
 	if err != nil {
-		return "", SendErrorStatus(c, "A file with the id provided does not exist")
+		return "A file with the id provided does not exist", err
 	}
 
 	// Initialize MinIO client
 	minioClient, err := getMinioClient()
 	if err != nil {
-		return "", SendErrorStatus(c, "Failed to initialize minio client")
+		return "Failed to initialize minio client", err
 	}
 
 	//download file from MinIO
@@ -256,13 +251,13 @@ func CopyPDF(c *fiber.Ctx) (string, error) {
 
 	file, err := minioClient.GetObject(ctx, bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
-		return "", SendErrorStatus(c, "Failed to get the file from MinIO")
+		return "Failed to get the file from MinIO", err
 	}
 	defer file.Close()
 
 	localFile, err := os.Create(record.Name)
 	if err != nil {
-		return "", SendErrorStatus(c, "Failed to create a temporary copy of the file")
+		return "Failed to create a temporary copy of the file", err
 	}
 	defer localFile.Close()
 
