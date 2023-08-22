@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"main/utils"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -44,6 +45,7 @@ func SaveFile(c *fiber.Ctx) error {
 	pdfFileName := file.Filename
 	reader, text, err := utils.ReadPdf(pdfFileName)
 	if err != nil {
+		fmt.Printf("err: %v\n", err)
 		return utils.SendErrorStatus(c, "Failed to read pdf as text")
 	}
 
@@ -168,8 +170,9 @@ func GetOccurrence(c *fiber.Ctx) error {
 	result := fiber.Map{}
 	foundIn := map[string]string{}
 	for index, sentence := range sentences {
-
-		words := strings.Split(strings.TrimSpace(sentence.Sentence), " ")
+		reg := regexp.MustCompile("[^a-zA-Z\\s-_/]+")
+		rep := reg.ReplaceAllString(sentence.Sentence, " ")
+		words := strings.Split(rep, " ")
 		found := false
 		for _, word := range words {
 

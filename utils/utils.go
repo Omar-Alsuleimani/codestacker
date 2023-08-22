@@ -9,6 +9,7 @@ import (
 	"log"
 	"main/database"
 	"os"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -172,25 +173,33 @@ func SendBadRequestStatus(c *fiber.Ctx, err string) error {
 }
 
 func ReadPdf(path string) (*pdf.Reader, string, error) {
-	r, err := pdf.Open(path)
+	reader, err := pdf.Open(path)
 	if err != nil {
 		return nil, "", err
 	}
-	var buf bytes.Buffer
-	b, err := r.GetPlainText()
+
+	cmd := exec.Command("pdftotext", path, "-")
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+
+	err = cmd.Run()
 	if err != nil {
 		return nil, "", err
 	}
-	buf.ReadFrom(b)
-	return r, buf.String(), nil
+
+	textContent := out.String()
+	textContent = strings.Replace(textContent, "\n", " ", -1)
+	return reader, textContent, nil
 }
 
 func CountFilteredWords(text string) map[string]int {
-	reg := regexp.MustCompile("[^a-zA-Z]+")
+	reg := regexp.MustCompile("[^a-zA-Z.\\s-_/]+")
 	pointless := reg.ReplaceAllString(text, " ")
+	reg = regexp.MustCompile(`\b\w\b`)
+	pointless = reg.ReplaceAllString(pointless, "")
 	clean := stopwords.CleanString(pointless, "en", false)
 	words := strings.Split(clean, " ")
-	fmt.Println(clean)
 	filteredWords := map[string]int{}
 
 	for _, word := range words {
